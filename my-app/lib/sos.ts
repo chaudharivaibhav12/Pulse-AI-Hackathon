@@ -1,13 +1,19 @@
 // lib/sos.ts
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { Resend } from "resend";
 
 export async function triggerEmergencyEmail(reason: string) {
   try {
+    const apiKey = process.env.RESEND_API_KEY;
+
+    if (!apiKey) {
+      console.warn("SOS email skipped: RESEND_API_KEY is not configured.");
+      return { success: false, skipped: true };
+    }
+
+    const resend = new Resend(apiKey);
     const { data, error } = await resend.emails.send({
-      from: 'PulseAI <onboarding@resend.dev>', // Resend gives you this default for testing
-      to: ['ojaswikaushik14@gmail.com'], // Change to your email for the demo
+      from: "PulseAI <onboarding@resend.dev>",
+      to: ["ojaswikaushik14@gmail.com"],
       subject: `🚨 ALERT: Cardiac Symptoms Detected - Maria`,
       html: `
         <h2>Emergency Alert from Pulse AI</h2>

@@ -1,133 +1,170 @@
 import { NextRequest, NextResponse } from "next/server";
-import { store, logMessage } from "@/lib/store";
+import { gemini, GEMINI_TEXT_MODEL } from "@/lib/openai";
 import { MARIA_CONTEXT } from "@/lib/patient";
 import { triggerEmergencyEmail } from "@/lib/sos";
+import { logMessage } from "@/lib/store";
+
+type CopilotResponse = {
+  reply: string;
+  current_step: 1 | 2 | 3 | 4 | 5;
+  sentiment_score: number;
+  escalate: boolean;
+  recommendations: string[];
+  agent?: string;
+};
+
+const RED_FLAG_SYMPTOMS = [
+  "chest pain",
+  "chest tightness",
+  "shortness of breath",
+  "severe shortness of breath",
+  "dizziness",
+  "dizzy",
+  "nausea",
+  "heart fluttering",
+  "fluttering",
+  "racing heart",
+  "something feels wrong",
+];
+
+function detectRedFlag(transcript: string) {
+  const normalized = transcript.toLowerCase();
+  return RED_FLAG_SYMPTOMS.find((symptom) => normalized.includes(symptom)) ?? null;
+}
+
+function parseResponse(text: string): CopilotResponse | null {
+  const cleanJson = text.replace(/```json|```/g, "").trim();
+
+  try {
+    const parsed = JSON.parse(cleanJson) as Partial<CopilotResponse>;
+    if (
+      typeof parsed.reply === "string" &&
+      typeof parsed.current_step === "number" &&
+      typeof parsed.sentiment_score === "number" &&
+      typeof parsed.escalate === "boolean" &&
+      Array.isArray(parsed.recommendations)
+    ) {
+      return {
+        reply: parsed.reply,
+        current_step: Math.min(5, Math.max(1, parsed.current_step)) as 1 | 2 | 3 | 4 | 5,
+        sentiment_score: parsed.sentiment_score,
+        escalate: parsed.escalate,
+        recommendations: parsed.recommendations.filter(
+          (recommendation): recommendation is string => typeof recommendation === "string"
+        ),
+        agent: typeof parsed.agent === "string" ? parsed.agent : undefined,
+      };
+    }
+  } catch (error) {
+    console.error("Co-pilot JSON parse failed:", error);
+  }
+
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   try {
     const { transcript } = await req.json();
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
-    // 1. TOOL DEFINITION
-    const tools = [
-      {
-        function_declarations: [
-          {
-            name: "trigger_guardian_heart_sos",
-            description: "IMMEDIATELY call this if Maria reports chest pain, dizziness, heart fluttering, or severe shortness of breath.",
-            parameters: {
-              type: "object",
-              properties: {
-                reason: { type: "string", description: "The specific symptom detected." },
-                severity: { type: "string", enum: ["high", "critical"] }
-              },
-              required: ["reason", "severity"]
-            }
-          }
-        ]
-      }
+    if (!transcript || typeof transcript !== "string") {
+      return NextResponse.json({ error: "A valid transcript is required." }, { status: 400 });
+    }
+
+    logMessage("user", transcript, "copilot");
+
+    const symptom = detectRedFlag(transcript);
+    if (symptom) {
+      await triggerEmergencyEmail(symptom);
+
+      const emergencyResponse: CopilotResponse = {
+        reply:
+          "Maria, stop what you're doing and sit down right now. I'm alerting your care team. Breathe slowly, and if this gets worse, call 911.",
+        escalate: true,
+        agent: "Guardian Heart",
+        current_step: 3,
+        sentiment_score: 1,
+        recommendations: ["Sit down", "Breathe slowly", "Call 911 if symptoms worsen"],
+      };
+
+      logMessage("assistant", emergencyResponse.reply, "copilot");
+      return NextResponse.json(emergencyResponse);
+    }
+
+    const history = [
+      ...[
+        {
+          role: "user" as const,
+          parts: [
+            {
+              text:
+                "Start the daily check-in naturally. Ask one question at a time and keep the tone calm and supportive.",
+            },
+          ],
+        },
+      ],
+      ...[],
     ];
 
-    const copilotPrompt = `
-      ${MARIA_CONTEXT}
+    const model = gemini.getGenerativeModel({
+      model: GEMINI_TEXT_MODEL,
+      systemInstruction: `${MARIA_CONTEXT}
 
-      You are Pulse, Maria's cardiac rehab co-pilot. 
-      
-      USER INPUT: "${transcript}"
+You are Pulse, Maria's cardiac rehab co-pilot.
 
-      GOAL: Guide Maria through the 5-step Daily Check-in naturally:
-      1. Mood check (1-10)
-      2. Activity check (Walking/Movement)
-      3. Symptom check (Chest tightness, dizziness, shortness of breath)
-      4. Win celebration (Celebrate any small victory)
-      5. Tomorrow's nudge (One gentle goal)
+Your job is to guide Maria through a 5-step daily check-in naturally:
+1. Mood check
+2. Activity check
+3. Symptom check
+4. Win celebration
+5. Tomorrow's nudge
 
-      SAFETY OVERRIDE (PRIORITY 1):
-      If input mentions: chest pain, dizziness, shortness of breath, nausea, heart fluttering, or "something feels wrong":
-      - Call 'trigger_guardian_heart_sos' immediately.
-      - Return the specific safety reply.
+Rules:
+- Ask one thing at a time and sound warm, calm, and human.
+- Keep replies concise.
+- Do not give medical advice or change prescriptions.
+- If Maria sounds discouraged, validate her feelings and mention Sofia naturally when helpful.
+- Return JSON only with no markdown.
 
-      SENTIMENT RULES:
-      - Mood ≤ 3 or phrases like "tired/scared/not worth it": Use deep empathy, validate feelings, mention her daughter Sofia.
-      - Mood ≥ 7: Celebrate enthusiastically!
-
-      STRICT JSON OUTPUT ONLY (No markdown backticks):
-      {
-        "reply": "string",
-        "current_step": 1 | 2 | 3 | 4 | 5,
-        "sentiment_score": number,
-        "escalate": boolean,
-        "recommendations": ["string"]
-      }
-
-      IMPORTANT: Your response must be a raw JSON object. Do not include markdown formatting or backticks.
-    `;
-
-    // 2. THE REQUEST
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ 
-          parts: [{ text: `User said: "${transcript}"\n\nInstructions: ${copilotPrompt}` }] 
-        }],
-        tools: tools,
-        tool_config: { function_calling_config: { mode: "AUTO" } },
-        generationConfig: { 
-          temperature: 0.7 
-        }
-      })
+JSON shape:
+{
+  "reply": "string",
+  "current_step": 1 | 2 | 3 | 4 | 5,
+  "sentiment_score": number,
+  "escalate": boolean,
+  "recommendations": ["string"]
+}`,
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.7,
+      },
     });
 
-    const data = await response.json();
+    const chat = model.startChat({
+      history,
+    });
+    const result = await chat.sendMessage(transcript);
+    const rawText = result.response.text();
+    const parsed = parseResponse(rawText);
 
-    if (!data.candidates || data.candidates.length === 0) {
-      throw new Error("Gemini returned an empty response.");
-    }
-
-    const part = data.candidates[0].content.parts[0];
-
-    // 3. AGENT EXECUTION (Function Call Check)
-    if (part.functionCall) {
-      const { name, args } = part.functionCall;
-      
-      if (name === "trigger_guardian_heart_sos") {
-        await triggerEmergencyEmail(args.reason);
-        return NextResponse.json({
-          reply: "Maria, stop what you're doing and sit down right now. I'm alerting your care team. You do not need to worry — just breathe slowly. If this gets worse, call 911.",
-          escalate: true,
-          agent: "Guardian Heart",
-          current_step: 3,
-          sentiment_score: 1,
-          recommendations: ["Sit down", "Breathe slowly", "Wait for help"]
-        });
-      }
-    }
-
-    // 4. STANDARD FLOW (With Sanitization)
-    const rawText = part.text || "{}";
-    
-    // Remove Markdown code blocks (```json ... ```) if they exist
-    const cleanJson = rawText.replace(/```json|```/g, "").trim();
-
-    try {
-      const aiResponse = JSON.parse(cleanJson);
-      return NextResponse.json(aiResponse);
-    } catch (parseError) {
-      console.error("JSON Parse Error. Raw text was:", rawText);
-      // Fallback response for the UI
-      return NextResponse.json({
-        reply: rawText.length > 20 ? rawText : "I'm having a little trouble with my data, Maria. How are you feeling right now?",
-        escalate: false,
+    if (!parsed) {
+      const fallback: CopilotResponse = {
+        reply:
+          rawText.length > 20
+            ? rawText
+            : "I’m having trouble organizing that check-in, Maria. Tell me how your day has felt so far.",
         current_step: 1,
         sentiment_score: 5,
-        recommendations: ["Let's keep chatting"]
-      });
+        escalate: false,
+        recommendations: ["Share how you feel", "Tell me about today’s activity"],
+      };
+      logMessage("assistant", fallback.reply, "copilot");
+      return NextResponse.json(fallback);
     }
 
-  } catch (error: any) {
-    console.error("Co-pilot Route Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    logMessage("assistant", parsed.reply, "copilot");
+    return NextResponse.json(parsed);
+  } catch (error) {
+    console.error("Co-pilot Route Error:", error);
+    return NextResponse.json({ error: "Unable to process copilot request right now." }, { status: 500 });
   }
 }

@@ -13,6 +13,47 @@ const contacts = [
 export default function SOSPage() {
   const [sosActive, setSosActive] = useState(false)
   const [checkMode, setCheckMode] = useState(false)
+  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([])
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  function toggleSymptom(label: string) {
+    setSelectedSymptoms((prev) =>
+      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label]
+    )
+  }
+
+  async function triggerSOS(reason?: string) {
+    setIsSubmitting(true)
+    setStatusMessage(null)
+
+    try {
+      const response = await fetch("/api/sos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason:
+            reason ??
+            (selectedSymptoms.length > 0
+              ? `Maria reported these symptoms: ${selectedSymptoms.join(", ")}.`
+              : "Maria tapped the SOS emergency button and reported feeling unwell."),
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setStatusMessage(data.error ?? "Unable to alert the care team right now.")
+        return
+      }
+
+      setStatusMessage(data.message ?? "Emergency alert sent to the care team.")
+      setSosActive(true)
+    } catch {
+      setStatusMessage("Unable to alert the care team right now.")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   if (sosActive) {
     return (
@@ -49,7 +90,12 @@ export default function SOSPage() {
         </p>
 
         <button
-          onClick={() => setSosActive(false)}
+          onClick={() => {
+            setSosActive(false)
+            setCheckMode(false)
+            setSelectedSymptoms([])
+            setStatusMessage(null)
+          }}
           className="bg-white border-2 border-primary text-primary font-bold py-4 px-10 rounded-2xl text-lg hover:bg-primary/5 transition-colors"
         >
           I feel better now
@@ -62,6 +108,11 @@ export default function SOSPage() {
     return (
       <PageShell title="SOS">
         <h1 className="text-3xl font-bold mb-4">{"Let's check in 🔍"}</h1>
+        {statusMessage && (
+          <div className="mb-4 rounded-2xl border border-border bg-white p-4 text-sm text-foreground shadow-sm">
+            {statusMessage}
+          </div>
+        )}
         <div className="space-y-4">
           {[
             { label: "Chest pain or pressure?", id: "chest" },
@@ -71,20 +122,31 @@ export default function SOSPage() {
             { label: "Unusual fatigue?", id: "fatigue" },
           ].map(({ label, id }) => (
             <label key={id} className="flex items-center gap-4 bg-white border border-border rounded-2xl px-5 py-4 cursor-pointer hover:bg-secondary transition-colors">
-              <input type="checkbox" id={id} className="w-6 h-6 accent-destructive cursor-pointer" />
+              <input
+                type="checkbox"
+                id={id}
+                checked={selectedSymptoms.includes(label)}
+                onChange={() => toggleSymptom(label)}
+                className="w-6 h-6 accent-destructive cursor-pointer"
+              />
               <span className="text-lg text-foreground">{label}</span>
             </label>
           ))}
         </div>
         <div className="mt-6 space-y-3">
           <button
-            onClick={() => setSosActive(true)}
+            onClick={() => void triggerSOS()}
+            disabled={isSubmitting}
             className="w-full bg-destructive text-white text-xl font-bold py-5 rounded-2xl hover:bg-destructive/90 active:scale-[0.98] transition-all"
           >
-            Alert My Care Team
+            {isSubmitting ? "Alerting Care Team..." : "Alert My Care Team"}
           </button>
           <button
-            onClick={() => setCheckMode(false)}
+            onClick={() => {
+              setCheckMode(false)
+              setSelectedSymptoms([])
+              setStatusMessage(null)
+            }}
             className="w-full bg-secondary text-foreground text-lg font-semibold py-4 rounded-2xl hover:bg-muted transition-colors"
           >
             I feel fine, go back
@@ -101,16 +163,23 @@ export default function SOSPage() {
         Your safety is the priority. Tap if you need help.
       </p>
 
+      {statusMessage && (
+        <div className="mb-4 rounded-2xl border border-border bg-white p-4 text-sm text-foreground shadow-sm">
+          {statusMessage}
+        </div>
+      )}
+
       {/* Big SOS Button */}
       <div className="flex justify-center mb-6">
         <button
-          onClick={() => setSosActive(true)}
+          onClick={() => void triggerSOS("Maria tapped the SOS emergency button and needs immediate support.")}
+          disabled={isSubmitting}
           aria-label="SOS Emergency button — tap if you feel unwell"
-          className="w-56 h-56 rounded-full bg-destructive text-white flex flex-col items-center justify-center shadow-2xl hover:bg-destructive/90 active:scale-95 transition-all border-8 border-red-300 focus:outline-none focus:ring-4 focus:ring-red-400"
+          className="w-56 h-56 rounded-full bg-destructive text-white flex flex-col items-center justify-center shadow-2xl hover:bg-destructive/90 active:scale-95 transition-all border-8 border-red-300 focus:outline-none focus:ring-4 focus:ring-red-400 disabled:opacity-70"
         >
           <AlertTriangle className="w-14 h-14 mb-2 fill-white/20" />
           <span className="text-2xl font-black tracking-tight leading-tight text-center px-4">
-            TAP IF YOU FEEL UNWELL
+            {isSubmitting ? "SENDING ALERT..." : "TAP IF YOU FEEL UNWELL"}
           </span>
         </button>
       </div>
