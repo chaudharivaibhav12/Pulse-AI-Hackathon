@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gemini } from "@/lib/openai";
+import { gemini, GEMINI_TEXT_MODEL } from "@/lib/openai";
 import { store, logMessage } from "@/lib/store";
 import { MARIA_CONTEXT } from "@/lib/patient";
 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   }));
 
   const model = gemini.getGenerativeModel({
-    model: "gemini-1.5-pro",
+    model: GEMINI_TEXT_MODEL,
     systemInstruction: SYSTEM_PROMPT + "\n\nPatient context:\n" + MARIA_CONTEXT,
   });
 
