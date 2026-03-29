@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { gemini, GEMINI_TEXT_MODEL } from "@/lib/openai";
 import { MARIA_CONTEXT } from "@/lib/patient";
-import { store, logMessage } from "@/lib/store";
+import {
+  getAvailableBuddyUsers,
+  getBuddyConnectionState,
+  getRecoveryCircle,
+  logMessage,
+  registerUser,
+  store,
+} from "@/lib/store";
 
 const SYSTEM_PROMPT = `
 You are the Buddy Network coordinator for Maria's cardiac rehab platform.
 Your job is to help Maria connect with recovery peers and facilitate group accountability.
 You do NOT give medical advice.
-
-Available buddies in Maria's network:
-- Robert, 63, Week 6 of rehab, 2.1 miles away, same rehab center, English
-- Diane, 55, Week 3 of rehab, 3.4 miles away, same rehab center, English
-
-How to position buddies:
-- Suggest Robert as "someone who's been where you are and made it through the hard part"
-- Suggest Diane as "someone going through exactly the same week as you right now"
 
 What you can help with:
 - Coordinating a shared walk
@@ -24,18 +25,17 @@ What you can help with:
 
 Week-8 retention mechanic:
 - Reference the Recovery Circle streak naturally when helpful
-- Example: "Your Recovery Circle has a 5-day streak going. Robert and Diane are counting on you."
+- Example: "Your Recovery Circle has a 3-day streak going. Your buddies are counting on you."
 
 Transportation support:
-- If Maria mentions transportation difficulty, you may suggest:
-  "Robert mentioned he drives past your area on Tuesdays. Want me to ask if he can give you a lift to clinic?"
-- Carpool is always opt-in only
+- If Maria mentions transportation difficulty, only suggest coordinating with buddies who are actually available in the provided context.
+- Carpool is always opt-in only and only when a real buddy exists.
 
 Safety and privacy rules:
 - Never give medical advice
 - If medical questions come up, say: "That's a great one for your care team."
 - Never share home addresses, exact locations, phone numbers, or contact details
-- Only mention approximate distances
+- Only mention profile details that are present in the provided context
 - If Maria mentions symptoms, stop buddy coordination and defer to the SOS flow
 - Exercise goals come from the care team, not buddies
 
@@ -67,6 +67,8 @@ function hasRedFlagSymptoms(message: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email;
     const { message } = await req.json();
 
     if (!message || typeof message !== "string") {
@@ -76,21 +78,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!email) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    registerUser({
+      email,
+      name: session.user?.name,
+      image: session.user?.image,
+    });
+
+    const availableBuddies = getAvailableBuddyUsers(email);
+    const recoveryCircle = getRecoveryCircle(email);
+    const connectionState = getBuddyConnectionState(email);
+
+    if (availableBuddies.length === 0) {
+      return NextResponse.json({
+        reply:
+          "You do not have any real buddies in your network yet. Ask another user to sign in first, then you can start connecting here.",
+        mode: "buddy",
+        buddies: [],
+        recoveryCircle,
+      });
+    }
+
     if (hasRedFlagSymptoms(message)) {
       return NextResponse.json({
         reply:
           "I'm glad you told me. Because you mentioned symptoms, I'm pausing buddy coordination for now. Please stop activity immediately and contact your care team right away. If this feels urgent or severe, seek emergency help now.",
         mode: "sos",
-        buddies: store.buddies,
-        recoveryCircle: store.recoveryCircle,
+        buddies: availableBuddies,
+        recoveryCircle,
       });
     }
 
     logMessage("user", message, "buddy");
 
     const buddyContext = `
-Current buddies: ${JSON.stringify(store.buddies)}.
-Recovery Circle: ${JSON.stringify(store.recoveryCircle)}.
+Current signed-in user: ${JSON.stringify({ email, name: session.user?.name })}.
+Available buddies: ${JSON.stringify(availableBuddies)}.
+Connection state: ${JSON.stringify(connectionState)}.
+Recovery Circle: ${JSON.stringify(recoveryCircle)}.
 Suggested shared activities: ${JSON.stringify(store.sharedActivities)}.
 `;
 
@@ -116,8 +144,8 @@ Suggested shared activities: ${JSON.stringify(store.sharedActivities)}.
     return NextResponse.json({
       reply,
       mode: "buddy",
-      buddies: store.buddies,
-      recoveryCircle: store.recoveryCircle,
+      buddies: availableBuddies,
+      recoveryCircle,
     });
   } catch (error) {
     console.error("Buddy route error:", error);
