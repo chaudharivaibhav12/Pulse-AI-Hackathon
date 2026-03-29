@@ -3,6 +3,8 @@ import { gemini, GEMINI_TEXT_MODEL } from "@/lib/openai";
 import { MARIA_CONTEXT } from "@/lib/patient";
 import { logMessage, store } from "@/lib/store";
 
+export const runtime = "nodejs";
+
 type RequestBody = {
   message?: string;
   imageDataUrl?: string;
@@ -21,6 +23,8 @@ type NutritionAssessment = {
   healthierSwap?: string;
   reply: string;
 };
+
+const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function parseDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
@@ -84,6 +88,13 @@ export async function POST(req: NextRequest) {
 
     if (imageDataUrl && !parsedImage) {
       return NextResponse.json({ error: "The uploaded image format is invalid." }, { status: 400 });
+    }
+
+    if (parsedImage && !SUPPORTED_IMAGE_MIME_TYPES.has(parsedImage.mimeType)) {
+      return NextResponse.json(
+        { error: "Please upload a JPG, PNG, or WEBP image for nutrition analysis." },
+        { status: 400 }
+      );
     }
 
     const recentNutritionHistory = store.nutritionLog.slice(-5);

@@ -81,6 +81,45 @@ export default function NutritionPage() {
     };
   }, []);
 
+  const convertFileToJpegDataUrl = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const fileReader = new FileReader();
+
+      fileReader.onerror = () => reject(new Error("Unable to read that image."));
+      fileReader.onload = () => {
+        const source = typeof fileReader.result === "string" ? fileReader.result : "";
+
+        if (!source) {
+          reject(new Error("Unable to read that image."));
+          return;
+        }
+
+        const image = new Image();
+        image.onerror = () => reject(new Error("Unable to process that image."));
+        image.onload = () => {
+          const maxDimension = 1400;
+          const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.width * scale));
+          canvas.height = Math.max(1, Math.round(image.height * scale));
+
+          const context = canvas.getContext("2d");
+          if (!context) {
+            reject(new Error("Unable to process that image."));
+            return;
+          }
+
+          context.fillStyle = "#ffffff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.86));
+        };
+        image.src = source;
+      };
+
+      fileReader.readAsDataURL(file);
+    });
+
   const handleImageSelect = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
 
@@ -88,14 +127,22 @@ export default function NutritionPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      setImagePreview(result);
-      setImageDataUrl(result);
-      setError("");
-    };
-    reader.readAsDataURL(file);
+    setLoading(true);
+    setError("");
+
+    convertFileToJpegDataUrl(file)
+      .then((jpegDataUrl) => {
+        setImagePreview(jpegDataUrl);
+        setImageDataUrl(jpegDataUrl);
+      })
+      .catch((conversionError) => {
+        setImagePreview("");
+        setImageDataUrl("");
+        setError(conversionError instanceof Error ? conversionError.message : "Unable to process that image.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   const runFoodCheck = async () => {
