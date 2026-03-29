@@ -20,6 +20,16 @@ export const store = {
     { id: "b1", name: "Robert", age: 63, rehabWeek: 6, distance: "2.1 miles", sharedCenter: true, language: "English" },
     { id: "b2", name: "Diane", age: 55, rehabWeek: 3, distance: "3.4 miles", sharedCenter: true, language: "English" },
   ],
+  recoveryCircle: {
+    streakDays: 5,
+    members: ["Robert", "Diane", "Maria"],
+    lastCheckIn: new Date().toISOString(),
+  },
+  sharedActivities: [
+    { id: "a1", type: "shared_walk", label: "Shared walk later this week" },
+    { id: "a2", type: "check_in_call", label: "Quick check-in call" },
+    { id: "a3", type: "clinic_day_plan", label: "Attend rehab together" },
+  ],
   progressLog: [] as Array<{ week: number; anxietyScore: number; sessionsCompleted: number; badges: string[] }>,
   messages: [] as Array<{ role: string; content: string; feature: string; timestamp: string }>,
   sosLog: [] as Array<{ timestamp: string; type: string; resolved: boolean }>,
