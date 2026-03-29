@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gemini } from "@/lib/openai";
+import { gemini, GEMINI_TEXT_MODEL } from "@/lib/openai";
 import { MARIA_CONTEXT } from "@/lib/patient";
 import { store, logMessage } from "@/lib/store";
 
@@ -103,7 +103,7 @@ Suggested shared activities: ${JSON.stringify(store.sharedActivities)}.
       }));
 
     const model = gemini.getGenerativeModel({
-      model: "gemini-1.5-pro",
+      model: GEMINI_TEXT_MODEL,
       systemInstruction: `${SYSTEM_PROMPT}\n${MARIA_CONTEXT}\n${buddyContext}`,
     });
 
