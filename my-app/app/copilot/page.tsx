@@ -5,6 +5,43 @@ import { Send, Mic } from "lucide-react"
 import { PageShell } from "@/components/pulse/page-shell"
 import { TypingIndicator } from "@/components/pulse/typing-indicator"
 
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor
+    webkitSpeechRecognition?: SpeechRecognitionConstructor
+  }
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number
+  results: {
+    [index: number]: {
+      [index: number]: {
+        transcript: string
+      }
+      isFinal: boolean
+      length: number
+    }
+    length: number
+  }
+}
+
+interface SpeechRecognitionLike {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onstart: (() => void) | null
+  onend: (() => void) | null
+  onerror: ((event: { error: string }) => void) | null
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null
+  start: () => void
+  stop: () => void
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionLike
+}
+
 interface Message {
   id: string
   role: "user" | "ai"
@@ -40,22 +77,88 @@ export default function CopilotPage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
+  const [isListening, setIsListening] = useState(false)
+  const [speechSupported, setSpeechSupported] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1)
   const [recommendations, setRecommendations] = useState<string[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const finalTranscriptRef = useRef("")
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isTyping])
 
+  useEffect(() => {
+    const SpeechRecognitionApi =
+      typeof window !== "undefined"
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : undefined
+
+    if (!SpeechRecognitionApi) {
+      setSpeechSupported(false)
+      return
+    }
+
+    const recognition = new SpeechRecognitionApi()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = "en-US"
+
+    recognition.onstart = () => {
+      finalTranscriptRef.current = ""
+      setIsListening(true)
+      setStatusMessage("Listening...")
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+      setStatusMessage((current) => (current === "Listening..." ? null : current))
+    }
+
+    recognition.onerror = (event) => {
+      setIsListening(false)
+      setStatusMessage(
+        event.error === "not-allowed"
+          ? "Microphone access was blocked."
+          : "Voice input failed. Try again."
+      )
+    }
+
+    recognition.onresult = (event) => {
+      let interimTranscript = ""
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcript = event.results[i][0]?.transcript ?? ""
+        if (event.results[i].isFinal) {
+          finalTranscriptRef.current += `${transcript} `
+        } else {
+          interimTranscript += transcript
+        }
+      }
+
+      setInput(`${finalTranscriptRef.current}${interimTranscript}`.trim())
+    }
+
+    recognitionRef.current = recognition
+    setSpeechSupported(true)
+
+    return () => {
+      recognition.stop()
+      recognitionRef.current = null
+    }
+  }, [])
+
   const sendMessage = async (text: string) => {
     if (!text.trim()) return
+    recognitionRef.current?.stop()
     const userMsg: Message = { id: Date.now().toString(), role: "user", text: text.trim() }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setIsTyping(true)
     setStatusMessage(null)
+    finalTranscriptRef.current = ""
 
     try {
       const res = await fetch("/api/copilot", {
@@ -88,6 +191,22 @@ export default function CopilotPage() {
     } finally {
       setIsTyping(false)
     }
+  }
+
+  const toggleListening = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      setStatusMessage("Speech-to-text is not supported in this browser.")
+      return
+    }
+
+    if (isListening) {
+      recognitionRef.current.stop()
+      return
+    }
+
+    setStatusMessage(null)
+    finalTranscriptRef.current = input ? `${input} ` : ""
+    recognitionRef.current.start()
   }
 
   return (
@@ -171,8 +290,13 @@ export default function CopilotPage() {
         {/* Input */}
         <div className="border-t border-border p-3 flex gap-2">
           <button
-            aria-label="Voice input (coming soon)"
-            className="flex items-center justify-center w-14 h-14 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors"
+            onClick={toggleListening}
+            aria-label={isListening ? "Stop voice input" : "Start voice input"}
+            className={`flex items-center justify-center w-14 h-14 rounded-xl transition-colors ${
+              isListening
+                ? "bg-destructive text-white hover:bg-destructive/90"
+                : "bg-primary/10 text-primary hover:bg-primary/20"
+            }`}
           >
             <Mic className="w-7 h-7" />
           </button>
