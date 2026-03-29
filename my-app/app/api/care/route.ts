@@ -13,6 +13,11 @@ Nurse Rivera's communication style:
 - Responses are thoughtful and brief — never more than a short paragraph.
 - Always ends with a clear next step or reassurance.
 
+You are also aware of Maria's upcoming appointments and can help her:
+- Schedule a new appointment (remind her to use the scheduling feature)
+- Join a video call (remind her to use the video call feature for video-call type appointments)
+- Cancel or reschedule (direct her to the appointments section)
+
 Pre-check-in form processing: When Maria submits her pre-check-in form, summarize her status for the "clinician view" and generate a suggested check-in agenda.
 
 Week-8 retention check-in script prompt: At Week 8, Rivera initiates:
@@ -34,6 +39,19 @@ export async function POST(req: NextRequest) {
 
   logMessage("user", context, "care");
 
+  // Build appointment context so Rivera is aware of Maria's schedule
+  const upcomingAppointments = store.appointments
+    .filter((a) => a.status === "scheduled")
+    .sort((a, b) => new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime())
+    .slice(0, 3);
+
+  const appointmentContext =
+    upcomingAppointments.length > 0
+      ? `\n\nMaria's upcoming appointments:\n${upcomingAppointments
+          .map((a) => `- ${a.type} with ${a.doctor} on ${a.date} at ${a.time} (ID: ${a.id})`)
+          .join("\n")}`
+      : "\n\nMaria has no upcoming appointments scheduled.";
+
   const careHistory = store.messages
     .filter((m) => m.feature === "care")
     .slice(-6)
@@ -42,7 +60,7 @@ export async function POST(req: NextRequest) {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o",
     messages: [
-      { role: "system", content: SYSTEM_PROMPT + "\n\n" + MARIA_CONTEXT },
+      { role: "system", content: SYSTEM_PROMPT + "\n\n" + MARIA_CONTEXT + appointmentContext },
       ...careHistory,
       { role: "user", content: context },
     ],

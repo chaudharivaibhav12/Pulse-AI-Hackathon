@@ -23,6 +23,38 @@ export const store = {
   progressLog: [] as Array<{ week: number; anxietyScore: number; sessionsCompleted: number; badges: string[] }>,
   messages: [] as Array<{ role: string; content: string; feature: string; timestamp: string }>,
   sosLog: [] as Array<{ timestamp: string; type: string; resolved: boolean }>,
+  appointments: [
+    {
+      id: "apt-1",
+      patientName: "Maria",
+      doctor: "Dr. Patel",
+      nurse: "Nurse Rivera",
+      date: "2026-04-02",
+      time: "10:00",
+      type: "check-in" as "check-in" | "video-call" | "in-person",
+      status: "scheduled" as "scheduled" | "cancelled" | "completed",
+      notes: "Week 3 progress review",
+      videoSessionId: null as string | null,
+    },
+  ] as Array<{
+    id: string;
+    patientName: string;
+    doctor: string;
+    nurse: string;
+    date: string;
+    time: string;
+    type: "check-in" | "video-call" | "in-person";
+    status: "scheduled" | "cancelled" | "completed";
+    notes: string;
+    videoSessionId: string | null;
+  }>,
+  videoSessions: [] as Array<{
+    sessionId: string;
+    appointmentId: string;
+    createdAt: string;
+    status: "waiting" | "active" | "ended";
+    joinUrl: string;
+  }>,
 };
 
 export function logMessage(role: string, content: string, feature: string) {
