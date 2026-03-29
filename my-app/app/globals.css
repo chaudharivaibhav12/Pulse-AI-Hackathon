@@ -131,3 +131,360 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes exercise-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes exercise-breathe {
+  0%,
+  100% {
+    transform: scale(0.92);
+    opacity: 0.4;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.88;
+  }
+}
+
+@keyframes exercise-walk-left-arm {
+  0%,
+  100% {
+    transform: rotate(24deg);
+  }
+  50% {
+    transform: rotate(-34deg);
+  }
+}
+
+@keyframes exercise-walk-right-arm {
+  0%,
+  100% {
+    transform: rotate(-34deg);
+  }
+  50% {
+    transform: rotate(24deg);
+  }
+}
+
+@keyframes exercise-walk-left-leg {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+  50% {
+    transform: rotate(26deg);
+  }
+}
+
+@keyframes exercise-walk-right-leg {
+  0%,
+  100% {
+    transform: rotate(26deg);
+  }
+  50% {
+    transform: rotate(-18deg);
+  }
+}
+
+@keyframes exercise-march-left-leg {
+  0%,
+  100% {
+    transform: rotate(-10deg) translateY(0);
+  }
+  30% {
+    transform: rotate(38deg) translateY(-10px);
+  }
+  60% {
+    transform: rotate(-10deg) translateY(0);
+  }
+}
+
+@keyframes exercise-march-right-leg {
+  0%,
+  100% {
+    transform: rotate(-10deg) translateY(0);
+  }
+  60% {
+    transform: rotate(38deg) translateY(-10px);
+  }
+  90% {
+    transform: rotate(-10deg) translateY(0);
+  }
+}
+
+@keyframes exercise-arm-circle-left {
+  0% {
+    transform: rotate(-28deg);
+  }
+  50% {
+    transform: rotate(210deg);
+  }
+  100% {
+    transform: rotate(332deg);
+  }
+}
+
+@keyframes exercise-arm-circle-right {
+  0% {
+    transform: rotate(28deg);
+  }
+  50% {
+    transform: rotate(-210deg);
+  }
+  100% {
+    transform: rotate(-332deg);
+  }
+}
+
+@keyframes exercise-stretch-torso {
+  0%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  50% {
+    transform: rotate(-12deg) translateY(-4px);
+  }
+}
+
+@keyframes exercise-step-touch {
+  0%,
+  100% {
+    transform: translateX(-10px);
+  }
+  50% {
+    transform: translateX(10px);
+  }
+}
+
+@keyframes exercise-spark {
+  0%,
+  100% {
+    transform: translateY(0) scale(0.85);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translateY(-8px) scale(1);
+    opacity: 0.85;
+  }
+}
+
+.exercise-demo__scene {
+  position: absolute;
+  inset: 0;
+}
+
+.exercise-demo__spark {
+  position: absolute;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.36);
+  filter: blur(0.2px);
+  animation: exercise-spark 5s ease-in-out infinite;
+}
+
+.exercise-demo__spark--1 {
+  top: 24%;
+  left: 16%;
+}
+
+.exercise-demo__spark--2 {
+  top: 18%;
+  right: 22%;
+  animation-delay: 1.2s;
+}
+
+.exercise-demo__spark--3 {
+  top: 52%;
+  right: 14%;
+  animation-delay: 2.3s;
+}
+
+.exercise-demo__halo {
+  position: absolute;
+  left: 50%;
+  bottom: 4.7rem;
+  width: 7rem;
+  height: 7rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(110, 231, 183, 0.55), rgba(59, 130, 246, 0) 70%);
+  animation: exercise-breathe 5s ease-in-out infinite;
+}
+
+.exercise-demo__figure {
+  position: absolute;
+  left: 50%;
+  bottom: 2.8rem;
+  width: 7rem;
+  height: 9.5rem;
+  transform: translateX(-50%);
+  animation: exercise-float var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__head {
+  position: absolute;
+  left: 50%;
+  top: 0.2rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f8fafc, #dbeafe);
+  box-shadow: 0 0 24px rgba(191, 219, 254, 0.5);
+}
+
+.exercise-demo__torso {
+  position: absolute;
+  left: 50%;
+  top: 2rem;
+  width: 1rem;
+  height: 3.3rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fde68a, #60a5fa);
+}
+
+.exercise-demo__arm,
+.exercise-demo__leg {
+  position: absolute;
+  left: 50%;
+  width: 0.55rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #f8fafc, rgba(191, 219, 254, 0.9));
+  transform-origin: top center;
+}
+
+.exercise-demo__arm {
+  top: 2.25rem;
+  height: 2.85rem;
+}
+
+.exercise-demo__arm--left {
+  margin-left: -1.2rem;
+}
+
+.exercise-demo__arm--right {
+  margin-left: 0.65rem;
+}
+
+.exercise-demo__leg {
+  top: 5rem;
+  height: 3.4rem;
+}
+
+.exercise-demo__leg--left {
+  margin-left: -0.8rem;
+}
+
+.exercise-demo__leg--right {
+  margin-left: 0.25rem;
+}
+
+.exercise-demo__scene--walk .exercise-demo__arm--left,
+.exercise-demo__scene--recovery .exercise-demo__arm--left {
+  animation: exercise-walk-left-arm var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--walk .exercise-demo__arm--right,
+.exercise-demo__scene--recovery .exercise-demo__arm--right {
+  animation: exercise-walk-right-arm var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--walk .exercise-demo__leg--left,
+.exercise-demo__scene--recovery .exercise-demo__leg--left {
+  animation: exercise-walk-left-leg var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--walk .exercise-demo__leg--right,
+.exercise-demo__scene--recovery .exercise-demo__leg--right {
+  animation: exercise-walk-right-leg var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--march .exercise-demo__arm--left {
+  animation: exercise-walk-left-arm var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--march .exercise-demo__arm--right {
+  animation: exercise-walk-right-arm var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--march .exercise-demo__leg--left {
+  animation: exercise-march-left-leg var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--march .exercise-demo__leg--right {
+  animation: exercise-march-right-leg var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--arm-circles .exercise-demo__arm--left {
+  animation: exercise-arm-circle-left var(--exercise-loop, 5s) linear infinite;
+}
+
+.exercise-demo__scene--arm-circles .exercise-demo__arm--right {
+  animation: exercise-arm-circle-right var(--exercise-loop, 5s) linear infinite;
+}
+
+.exercise-demo__scene--arm-circles .exercise-demo__leg--left,
+.exercise-demo__scene--arm-circles .exercise-demo__leg--right {
+  transform: rotate(6deg);
+}
+
+.exercise-demo__scene--stretch .exercise-demo__torso,
+.exercise-demo__scene--breathing .exercise-demo__torso {
+  animation: exercise-stretch-torso var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--stretch .exercise-demo__arm--left {
+  transform: rotate(-58deg);
+}
+
+.exercise-demo__scene--stretch .exercise-demo__arm--right {
+  transform: rotate(14deg);
+}
+
+.exercise-demo__scene--stretch .exercise-demo__leg--left,
+.exercise-demo__scene--stretch .exercise-demo__leg--right {
+  transform: rotate(8deg);
+}
+
+.exercise-demo__scene--breathing .exercise-demo__arm--left {
+  transform: rotate(-16deg);
+}
+
+.exercise-demo__scene--breathing .exercise-demo__arm--right {
+  transform: rotate(16deg);
+}
+
+.exercise-demo__scene--breathing .exercise-demo__leg--left,
+.exercise-demo__scene--breathing .exercise-demo__leg--right {
+  transform: rotate(2deg);
+}
+
+.exercise-demo__scene--step-touch .exercise-demo__figure {
+  animation: exercise-step-touch var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--step-touch .exercise-demo__arm--left {
+  animation: exercise-walk-left-arm var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--step-touch .exercise-demo__arm--right {
+  animation: exercise-walk-right-arm var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--step-touch .exercise-demo__leg--left {
+  animation: exercise-walk-left-leg var(--exercise-loop, 5s) ease-in-out infinite;
+}
+
+.exercise-demo__scene--step-touch .exercise-demo__leg--right {
+  animation: exercise-walk-right-leg var(--exercise-loop, 5s) ease-in-out infinite;
+}
