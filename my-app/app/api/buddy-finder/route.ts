@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/lib/openai";
+import { gemini } from "@/lib/openai";
 import { MARIA_CONTEXT } from "@/lib/patient";
-import { store } from "@/lib/store";
+import { store, logMessage } from "@/lib/store";
 
 const SYSTEM_PROMPT = `
 You are the Buddy Network coordinator for Maria's cardiac rehab platform.
@@ -65,39 +65,6 @@ function hasRedFlagSymptoms(message: string) {
   return SYMPTOM_KEYWORDS.some((symptom) => normalized.includes(symptom));
 }
 
-function buildMockReply(message: string) {
-  const normalized = message.toLowerCase();
-
-  if (
-    normalized.includes("transport") ||
-    normalized.includes("ride") ||
-    normalized.includes("drive") ||
-    normalized.includes("carpool")
-  ) {
-    return "You've got people in your corner, Maria. Robert is about 2.1 miles away and drives past your area on Tuesdays. Want me to set up an opt-in ride request for your next clinic visit, or would you rather invite Diane to attend together?";
-  }
-
-  if (
-    normalized.includes("walk") ||
-    normalized.includes("finished") ||
-    normalized.includes("completed")
-  ) {
-    return "That is a real win, Maria. Your Recovery Circle has a 5-day streak going, and Robert and Diane would love to cheer this on. I can help you send a quick update to Diane, who is in the same week as you, or plan a shared walk with Robert for later this week.";
-  }
-
-  if (
-    normalized.includes("anxious") ||
-    normalized.includes("tired") ||
-    normalized.includes("skip") ||
-    normalized.includes("missed") ||
-    normalized.includes("discouraged")
-  ) {
-    return "That sounds like a hard day, Maria, and you do not have to push through it alone. Diane is going through the same week as you right now, and Robert has already made it through this stretch. Your Recovery Circle has a 5-day streak going. Want me to help you set up a quick check-in call, a shared walk, or a clinic day plan together?";
-  }
-
-  return "You've got people in your corner, Maria. Robert is someone who's been where you are and made it through the hard part, and Diane is going through exactly the same week as you right now. I can help you plan a shared walk, a check-in call, or attending rehab together.";
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { message } = await req.json();
@@ -119,35 +86,35 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    logMessage("user", message, "buddy");
+
     const buddyContext = `
 Current buddies: ${JSON.stringify(store.buddies)}.
 Recovery Circle: ${JSON.stringify(store.recoveryCircle)}.
 Suggested shared activities: ${JSON.stringify(store.sharedActivities)}.
 `;
 
-    if (!openai) {
-      return NextResponse.json({
-        reply: buildMockReply(message),
-        mode: "buddy",
-        buddies: store.buddies,
-        recoveryCircle: store.recoveryCircle,
-      });
-    }
+    const history = store.messages
+      .filter((m) => m.feature === "buddy")
+      .slice(-10)
+      .map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.6,
-      messages: [
-        {
-          role: "system",
-          content: `${SYSTEM_PROMPT}\n${MARIA_CONTEXT}\n${buddyContext}`,
-        },
-        { role: "user", content: message },
-      ],
+    const model = gemini.getGenerativeModel({
+      model: "gemini-1.5-pro",
+      systemInstruction: `${SYSTEM_PROMPT}\n${MARIA_CONTEXT}\n${buddyContext}`,
     });
 
+    const chat = model.startChat({ history });
+    const result = await chat.sendMessage(message);
+    const reply = result.response.text();
+
+    logMessage("assistant", reply, "buddy");
+
     return NextResponse.json({
-      reply: completion.choices[0]?.message?.content ?? buildMockReply(message),
+      reply,
       mode: "buddy",
       buddies: store.buddies,
       recoveryCircle: store.recoveryCircle,
