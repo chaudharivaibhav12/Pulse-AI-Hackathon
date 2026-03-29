@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { store } from "@/lib/store";
-import { openai } from "@/lib/openai";
+import { gemini, GEMINI_TEXT_MODEL } from "@/lib/openai";
 import { MARIA_CONTEXT } from "@/lib/patient";
 import { randomUUID } from "crypto";
 
@@ -67,15 +67,15 @@ Write a short, warm confirmation message (2-3 sentences) for a newly scheduled $
 Mention what Maria should prepare or expect. Sign off as "Rivera".
 Tone: professional, reassuring, personal.`;
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT + "\n\n" + MARIA_CONTEXT },
-      { role: "user", content: `Appointment scheduled: ${type} on ${date} at ${time}. Notes: ${notes ?? "None"}` },
-    ],
+  const model = gemini.getGenerativeModel({
+    model: GEMINI_TEXT_MODEL,
+    systemInstruction: SYSTEM_PROMPT + "\n\n" + MARIA_CONTEXT,
   });
 
-  const confirmation = completion.choices[0].message.content ?? "";
+  const result = await model.generateContent(
+    `Appointment scheduled: ${type} on ${date} at ${time}. Notes: ${notes ?? "None"}`
+  );
+  const confirmation = result.response.text();
 
   return NextResponse.json(
     { appointment: newAppointment, confirmation },

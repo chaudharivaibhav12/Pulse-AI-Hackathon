@@ -12,26 +12,32 @@ interface Message {
   time: string
 }
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "nurse",
-    text: "Good morning, Maria! I reviewed your last session notes. You're doing wonderfully in Week 3. How are you feeling today? 😊",
-    time: "9:02 AM",
-  },
-  {
-    id: "2",
-    role: "user",
-    text: "Feeling a bit tired but I completed my walk yesterday!",
-    time: "9:15 AM",
-  },
-  {
-    id: "3",
-    role: "nurse",
-    text: "That's fantastic — completing your walk when you're tired shows real dedication! A little fatigue is normal at Week 3. Make sure to stay hydrated and rest between sessions. I've noted it in your chart.",
-    time: "9:18 AM",
-  },
-]
+interface Appointment {
+  id: string
+  patientName: string
+  doctor: string
+  nurse: string
+  date: string
+  time: string
+  type: "check-in" | "video-call" | "in-person"
+  status: "scheduled" | "cancelled" | "completed"
+  notes: string
+  videoSessionId: string | null
+}
+
+interface VideoResponse {
+  session: {
+    sessionId: string
+    appointmentId: string
+    createdAt: string
+    status: "waiting" | "active" | "ended"
+    joinUrl: string
+  }
+  message: string
+  instructions?: string[]
+}
+
+const initialMessages: Message[] = []
 
 const symptoms = [
   "Chest pain",
@@ -44,34 +50,71 @@ const symptoms = [
 
 export default function CarePage() {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const [appointments, setAppointments] = useState<Appointment[]>([])
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({ mood: 3, symptoms: [] as string[], sessions: "" })
   const [formSubmitted, setFormSubmitted] = useState(false)
+  const [scheduleData, setScheduleData] = useState({
+    date: "",
+    time: "",
+    type: "check-in" as Appointment["type"],
+    notes: "",
+  })
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [loadingAction, setLoadingAction] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isTyping])
 
-  const sendMessage = (text: string) => {
+  useEffect(() => {
+    async function loadAppointments() {
+      const res = await fetch("/api/care/appointments")
+      if (!res.ok) return
+      const data = await res.json()
+      setAppointments(data.appointments)
+    }
+
+    setMessages([
+      {
+        id: "intro",
+        role: "nurse",
+        text: "Good morning, Maria. This is Rivera. I'm here if you need to message your care team, submit your pre-check-in form, or manage your appointments.",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ])
+    loadAppointments()
+  }, [])
+
+  const sendMessage = async (text: string) => {
     if (!text.trim()) return
     const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     const userMsg: Message = { id: Date.now().toString(), role: "user", text: text.trim(), time: now }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setIsTyping(true)
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/care", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text.trim() }),
+      })
+      const data = await res.json()
       const nurseMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: `${Date.now()}-reply`,
         role: "nurse",
-        text: "Thank you for letting me know, Maria. I'll review that and get back to you shortly. Remember, if anything feels urgent, please use the SOS button.",
+        text: data.reply ?? "Rivera will get back to you soon.",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       }
       setMessages((prev) => [...prev, nurseMsg])
+    } catch {
+      setStatusMessage("Unable to send your message right now.")
+    } finally {
       setIsTyping(false)
-    }, 2200)
+    }
   }
 
   const toggleSymptom = (s: string) => {
@@ -83,9 +126,131 @@ export default function CarePage() {
     }))
   }
 
+  async function submitForm() {
+    setLoadingAction("form")
+    setStatusMessage(null)
+
+    try {
+      const res = await fetch("/api/care", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formData }),
+      })
+      const data = await res.json()
+
+      setFormSubmitted(true)
+      if (data.reply) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-form`,
+            role: "nurse",
+            text: data.reply,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ])
+      }
+    } catch {
+      setStatusMessage("Unable to submit the pre-check-in form right now.")
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  async function loadAppointments() {
+    const res = await fetch("/api/care/appointments")
+    if (!res.ok) {
+      setStatusMessage("Unable to load appointments right now.")
+      return
+    }
+    const data = await res.json()
+    setAppointments(data.appointments)
+  }
+
+  async function scheduleAppointment() {
+    setLoadingAction("schedule")
+    setStatusMessage(null)
+    try {
+      const res = await fetch("/api/care/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(scheduleData),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setStatusMessage(data.error ?? "Unable to schedule appointment.")
+        return
+      }
+
+      await loadAppointments()
+      setScheduleData({ date: "", time: "", type: "check-in", notes: "" })
+      setStatusMessage(data.confirmation ?? "Appointment scheduled.")
+    } catch {
+      setStatusMessage("Unable to schedule appointment right now.")
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  async function cancelAppointment(id: string) {
+    setLoadingAction(`cancel:${id}`)
+    setStatusMessage(null)
+    try {
+      const res = await fetch("/api/care/appointments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setStatusMessage(data.error ?? "Unable to cancel appointment.")
+        return
+      }
+      await loadAppointments()
+      setStatusMessage(data.message)
+    } catch {
+      setStatusMessage("Unable to cancel appointment right now.")
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  async function joinVideo(appointmentId: string) {
+    setLoadingAction(`video:${appointmentId}`)
+    setStatusMessage(null)
+    try {
+      const res = await fetch("/api/care/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointmentId }),
+      })
+      const data: VideoResponse & { error?: string } = await res.json()
+      if (!res.ok) {
+        setStatusMessage(data.error ?? "Unable to start video visit.")
+        return
+      }
+      window.open(data.session.joinUrl, "_blank", "noopener,noreferrer")
+      setStatusMessage(data.message)
+      await loadAppointments()
+    } catch {
+      setStatusMessage("Unable to start video visit right now.")
+    } finally {
+      setLoadingAction(null)
+    }
+  }
+
+  const nextAppointment = appointments.find((appointment) => appointment.status === "scheduled")
+
   return (
     <PageShell title="Care Team">
       <h1 className="text-3xl font-bold mb-4">Your Care Team 🩺</h1>
+
+      {statusMessage && (
+        <div className="mb-4 rounded-2xl border border-border bg-white p-4 text-sm text-foreground shadow-sm">
+          {statusMessage}
+        </div>
+      )}
 
       {/* Care Manager Card */}
       <div className="bg-white rounded-2xl border border-border shadow-sm p-5 mb-4">
@@ -108,7 +273,11 @@ export default function CarePage() {
           <Calendar className="w-6 h-6 text-primary shrink-0" />
           <div>
             <p className="text-sm text-muted-foreground">Next Check-In</p>
-            <p className="text-base font-bold text-primary">Tuesday, April 2 at 10:00 AM</p>
+            <p className="text-base font-bold text-primary">
+              {nextAppointment
+                ? `${nextAppointment.date} at ${nextAppointment.time} (${nextAppointment.type})`
+                : "No appointment scheduled"}
+            </p>
           </div>
         </div>
 
@@ -185,10 +354,11 @@ export default function CarePage() {
           </div>
 
           <button
-            onClick={() => setFormSubmitted(true)}
+            onClick={submitForm}
+            disabled={loadingAction === "form"}
             className="w-full bg-primary text-white font-bold py-4 rounded-xl text-lg hover:bg-primary/90 transition-colors"
           >
-            Submit Form
+            {loadingAction === "form" ? "Submitting..." : "Submit Form"}
           </button>
         </div>
       )}
@@ -200,6 +370,94 @@ export default function CarePage() {
           </p>
         </div>
       )}
+
+      <div className="bg-white rounded-2xl border border-border shadow-sm p-5 mb-4">
+        <h3 className="text-xl font-bold mb-4">Appointments</h3>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 mb-4">
+          <input
+            type="date"
+            value={scheduleData.date}
+            onChange={(e) => setScheduleData((prev) => ({ ...prev, date: e.target.value }))}
+            className="rounded-xl border border-border bg-secondary px-4 py-3 text-base outline-none"
+          />
+          <input
+            type="time"
+            value={scheduleData.time}
+            onChange={(e) => setScheduleData((prev) => ({ ...prev, time: e.target.value }))}
+            className="rounded-xl border border-border bg-secondary px-4 py-3 text-base outline-none"
+          />
+          <select
+            value={scheduleData.type}
+            onChange={(e) =>
+              setScheduleData((prev) => ({
+                ...prev,
+                type: e.target.value as Appointment["type"],
+              }))
+            }
+            className="rounded-xl border border-border bg-secondary px-4 py-3 text-base outline-none"
+          >
+            <option value="check-in">Check-In</option>
+            <option value="video-call">Video Call</option>
+            <option value="in-person">In Person</option>
+          </select>
+          <input
+            type="text"
+            value={scheduleData.notes}
+            onChange={(e) => setScheduleData((prev) => ({ ...prev, notes: e.target.value }))}
+            placeholder="Notes"
+            className="rounded-xl border border-border bg-secondary px-4 py-3 text-base outline-none"
+          />
+        </div>
+
+        <button
+          onClick={scheduleAppointment}
+          disabled={!scheduleData.date || !scheduleData.time || loadingAction === "schedule"}
+          className="mb-5 w-full rounded-xl bg-primary py-3 font-semibold text-white disabled:opacity-50"
+        >
+          {loadingAction === "schedule" ? "Scheduling..." : "Schedule Appointment"}
+        </button>
+
+        <div className="space-y-3">
+          {appointments.map((appointment) => (
+            <div key={appointment.id} className="rounded-xl border border-border p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {appointment.type} with {appointment.doctor}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {appointment.date} at {appointment.time}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Status: {appointment.status}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {appointment.type === "video-call" && appointment.status === "scheduled" && (
+                    <button
+                      onClick={() => joinVideo(appointment.id)}
+                      disabled={loadingAction === `video:${appointment.id}`}
+                      className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                    >
+                      {loadingAction === `video:${appointment.id}` ? "Joining..." : "Join Video"}
+                    </button>
+                  )}
+                  {appointment.status === "scheduled" && (
+                    <button
+                      onClick={() => cancelAppointment(appointment.id)}
+                      disabled={loadingAction === `cancel:${appointment.id}`}
+                      className="rounded-lg border border-destructive px-3 py-2 text-sm font-semibold text-destructive disabled:opacity-50"
+                    >
+                      {loadingAction === `cancel:${appointment.id}` ? "Cancelling..." : "Cancel"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Secure Message Thread */}
       <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden mb-4">
