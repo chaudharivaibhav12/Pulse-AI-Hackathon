@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@/lib/openai";
+import { gemini } from "@/lib/openai";
 import { store, logMessage } from "@/lib/store";
 import { MARIA_CONTEXT } from "@/lib/patient";
 
@@ -26,16 +26,21 @@ export async function POST(req: NextRequest) {
   const { message } = await req.json();
   logMessage("user", message, "main");
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT + "\n\nPatient context:\n" + MARIA_CONTEXT },
-      ...store.messages.slice(-10).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-      { role: "user", content: message },
-    ],
+  // Build conversation history in Gemini format (roles: "user" | "model")
+  const history = store.messages.slice(-10).map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const model = gemini.getGenerativeModel({
+    model: "gemini-1.5-pro",
+    systemInstruction: SYSTEM_PROMPT + "\n\nPatient context:\n" + MARIA_CONTEXT,
   });
 
-  const reply = completion.choices[0].message.content ?? "";
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessage(message);
+  const reply = result.response.text();
+
   logMessage("assistant", reply, "main");
   return NextResponse.json({ reply });
 }
