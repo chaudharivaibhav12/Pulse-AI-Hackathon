@@ -1,142 +1,307 @@
-"use client"
+"use client";
 
-import { useState, useRef, useEffect } from "react"
-import { Send, Mic } from "lucide-react"
-import { PageShell } from "@/components/pulse/page-shell"
-import { TypingIndicator } from "@/components/pulse/typing-indicator"
+import { ChangeEvent, useEffect, useRef, useState } from "react";
+import { Camera, LoaderCircle, ScanSearch, ShieldCheck, Sparkles, UploadCloud } from "lucide-react";
+import { PageShell } from "@/components/pulse/page-shell";
 
-interface Message {
-  id: string
-  role: "user" | "ai"
-  text: string
+type NutritionVerdict = "yes" | "sometimes" | "no";
+
+type NutritionHistoryItem = {
+  date: string;
+  item: string;
+  verdict: NutritionVerdict;
+};
+
+type NutritionAssessment = {
+  foodName: string;
+  ingredients: string[];
+  verdict: NutritionVerdict;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+  recommendation: string;
+  healthierSwap?: string;
+  reply: string;
+  recentHistory: NutritionHistoryItem[];
+};
+
+function getVerdictStyles(verdict: NutritionVerdict) {
+  if (verdict === "yes") {
+    return {
+      badge: "bg-green-100 text-green-700",
+      card: "border-green-200 bg-green-50",
+      label: "Good fit today",
+    };
+  }
+
+  if (verdict === "sometimes") {
+    return {
+      badge: "bg-amber-100 text-amber-700",
+      card: "border-amber-200 bg-amber-50",
+      label: "Okay with care",
+    };
+  }
+
+  return {
+    badge: "bg-red-100 text-red-700",
+    card: "border-red-200 bg-red-50",
+    label: "Not the best choice",
+  };
 }
-
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "ai",
-    text: "Hi Maria! I'm your Grocery Guard. Tell me what food you want to check, what's in your fridge, or what you'd like to cook. I'll help you make heart-healthy choices. 🥗",
-  },
-]
-
-const aiResponses: Record<string, string> = {
-  label: "Great choice to check the label! Look for sodium under 140mg per serving, saturated fat under 2g, and zero trans fat. For heart health, also watch for added sugars — aim for less than 5g per serving.",
-  fridge: "Sounds good! Tell me what ingredients you have and I'll suggest a heart-healthy meal that uses them. Every fresh veggie counts!",
-  recipe: "Here's a quick heart-healthy recipe: Baked Salmon with Steamed Broccoli. Season salmon with lemon, garlic, and herbs. Bake at 400°F for 15 minutes. Steam broccoli 5 minutes. Rich in omega-3s and low in sodium — perfect for cardiac rehab!",
-  default: "That's a great question! Generally for cardiac rehab, focus on foods low in sodium (under 1,500mg/day), rich in omega-3 fatty acids, high in fiber, and low in saturated fats. Fruits, vegetables, whole grains, and lean proteins are your best friends.",
-}
-
-const quickActions = [
-  { label: "Check a food label", key: "label" },
-  { label: "What's in my fridge?", key: "fridge" },
-  { label: "Show me a quick recipe", key: "recipe" },
-]
 
 export default function NutritionPage() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
-  const [input, setInput] = useState("")
-  const [isTyping, setIsTyping] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const [note, setNote] = useState("");
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageDataUrl, setImageDataUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [assessment, setAssessment] = useState<NutritionAssessment | null>(null);
+  const [recentHistory, setRecentHistory] = useState<NutritionHistoryItem[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, isTyping])
+    let ignore = false;
 
-  const sendMessage = (text: string) => {
-    if (!text.trim()) return
-    const userMsg: Message = { id: Date.now().toString(), role: "user", text: text.trim() }
-    setMessages((prev) => [...prev, userMsg])
-    setInput("")
-    setIsTyping(true)
+    async function loadRecentHistory() {
+      try {
+        const response = await fetch("/api/nutrition");
+        const data = (await response.json()) as { recentHistory?: NutritionHistoryItem[] };
 
-    setTimeout(() => {
-      const lower = text.toLowerCase()
-      const key = Object.keys(aiResponses).find((k) => lower.includes(k)) || "default"
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "ai",
-        text: aiResponses[key],
+        if (!ignore && Array.isArray(data.recentHistory)) {
+          setRecentHistory(data.recentHistory);
+        }
+      } catch {
+        // Keep the page usable even if the history fetch fails.
       }
-      setMessages((prev) => [...prev, aiMsg])
-      setIsTyping(false)
-    }, 1800)
-  }
+    }
+
+    loadRecentHistory();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const handleImageSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      setImagePreview(result);
+      setImageDataUrl(result);
+      setError("");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const runFoodCheck = async () => {
+    if (!imageDataUrl && !note.trim()) {
+      setError("Upload a food photo or add a short food note first.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/nutrition", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: note,
+          imageDataUrl,
+        }),
+      });
+
+      const data = (await response.json()) as NutritionAssessment | { error?: string };
+
+      if (!response.ok) {
+        throw new Error("error" in data && typeof data.error === "string" ? data.error : "Unable to analyze that food.");
+      }
+
+      setAssessment(data as NutritionAssessment);
+      setRecentHistory((data as NutritionAssessment).recentHistory);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to analyze that food.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verdictStyles = assessment ? getVerdictStyles(assessment.verdict) : null;
 
   return (
     <PageShell title="Nutrition">
-      <h1 className="text-3xl font-bold mb-2">Your Grocery Guard 🥗</h1>
-      <p className="text-muted-foreground text-lg mb-4 leading-relaxed">
-        Ask me anything about food, labels, or recipes.
+      <h1 className="mb-2 text-3xl font-bold">Your Grocery Guard</h1>
+      <p className="mb-5 text-lg leading-relaxed text-muted-foreground">
+        Upload a meal photo and Pulse will identify the food, guess the ingredients, and tell Maria whether it fits her
+        rehab plan based on her recent food history.
       </p>
 
-      {/* Chat window */}
-      <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden mb-4">
-        <div className="p-4 space-y-4 min-h-64 max-h-96 overflow-y-auto">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+      <section className="mb-5 rounded-2xl border border-border bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+            <Camera className="h-6 w-6" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold">Food Photo Upload</h2>
+            <p className="text-sm text-muted-foreground">Snap a meal, snack, or packaged item label.</p>
+          </div>
+        </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageSelect}
+          className="hidden"
+        />
+
+        {imagePreview ? (
+          <div className="mb-4 overflow-hidden rounded-2xl border border-border">
+            <img src={imagePreview} alt="Food preview for nutrition analysis" className="h-72 w-full object-cover" />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="mb-4 flex w-full flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 px-4 py-10 text-center transition-colors hover:border-primary/50 hover:bg-primary/10"
+          >
+            <UploadCloud className="h-8 w-8 text-primary" />
+            <div>
+              <p className="text-lg font-semibold text-foreground">Upload a food photo</p>
+              <p className="text-sm text-muted-foreground">Tap to browse or open your camera.</p>
+            </div>
+          </button>
+        )}
+
+        {imagePreview && (
+          <div className="mb-4 flex gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 rounded-xl border border-border bg-secondary px-4 py-3 text-sm font-medium text-secondary-foreground transition-colors hover:bg-muted"
             >
-              <div
-                className={`max-w-[85%] px-4 py-3 rounded-2xl text-base leading-relaxed ${
-                  msg.role === "ai"
-                    ? "bg-primary/10 text-foreground rounded-tl-sm"
-                    : "bg-primary text-white rounded-tr-sm"
-                }`}
-              >
-                {msg.text}
-              </div>
-            </div>
-          ))}
-          {isTyping && (
-            <div className="flex justify-start">
-              <TypingIndicator />
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
+              Change photo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setImagePreview("");
+                setImageDataUrl("");
+              }}
+              className="rounded-xl border border-border bg-white px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary"
+            >
+              Remove
+            </button>
+          </div>
+        )}
 
-        {/* Input */}
-        <div className="border-t border-border p-3 flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
-            placeholder="Ask about a food, ingredient, or recipe..."
-            className="flex-1 bg-secondary rounded-xl px-4 py-3 text-base outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Type your nutrition question"
-          />
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim()}
-            aria-label="Send message"
-            className="flex items-center justify-center w-12 h-12 bg-primary text-white rounded-xl disabled:opacity-40 hover:bg-primary/90 transition-colors"
-          >
-            <Send className="w-5 h-5" />
-          </button>
-          <button
-            aria-label="Voice input (coming soon)"
-            className="flex items-center justify-center w-12 h-12 bg-secondary text-muted-foreground rounded-xl hover:bg-muted transition-colors"
-          >
-            <Mic className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
+        <label className="mb-2 block text-sm font-semibold text-foreground">Optional note</label>
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Example: I want to eat this for lunch. Is it okay after rehab?"
+          className="mb-4 min-h-28 w-full rounded-2xl border border-border bg-secondary px-4 py-3 text-base outline-none focus:ring-2 focus:ring-primary"
+        />
 
-      {/* Quick action buttons */}
-      <div className="space-y-3">
-        <p className="text-base font-semibold text-muted-foreground">Quick options:</p>
-        {quickActions.map(({ label, key }) => (
-          <button
-            key={key}
-            onClick={() => sendMessage(label)}
-            className="w-full text-left bg-white border-2 border-border rounded-2xl px-5 py-4 text-base font-medium text-foreground hover:border-primary hover:bg-primary/5 transition-colors active:scale-[0.98]"
-          >
-            {label}
-          </button>
-        ))}
+        {error && <p className="mb-4 text-sm text-destructive">{error}</p>}
+
+        <button
+          type="button"
+          onClick={runFoodCheck}
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-3 rounded-2xl bg-primary px-5 py-4 text-lg font-bold text-white shadow-md transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <ScanSearch className="h-5 w-5" />}
+          {loading ? "Analyzing food..." : "Check this food"}
+        </button>
+      </section>
+
+      {assessment && verdictStyles && (
+        <section className={`mb-5 rounded-2xl border-2 p-5 ${verdictStyles.card}`}>
+          <div className="mb-3 flex items-start justify-between gap-4">
+            <div>
+              <span className={`rounded-full px-3 py-1 text-sm font-semibold ${verdictStyles.badge}`}>{verdictStyles.label}</span>
+              <h2 className="mt-2 text-2xl font-bold">{assessment.foodName}</h2>
+            </div>
+            <span className="rounded-full bg-white/80 px-3 py-1 text-sm font-medium text-muted-foreground">
+              Confidence {assessment.confidence}
+            </span>
+          </div>
+
+          <p className="mb-4 text-base leading-relaxed text-foreground/85">{assessment.reply}</p>
+
+          <div className="mb-4 rounded-2xl border border-white/60 bg-white/70 p-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Why Pulse said this</p>
+            <p className="mt-2 text-base leading-relaxed text-foreground">{assessment.reason}</p>
+          </div>
+
+          <div className="mb-4 rounded-2xl border border-white/60 bg-white/70 p-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Recommendation</p>
+            <p className="mt-2 text-base leading-relaxed text-foreground">{assessment.recommendation}</p>
+            {assessment.healthierSwap && (
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                Better swap: <span className="font-medium text-foreground">{assessment.healthierSwap}</span>
+              </p>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Likely ingredients</p>
+            <div className="flex flex-wrap gap-2">
+              {assessment.ingredients.map((ingredient) => (
+                <span
+                  key={ingredient}
+                  className="rounded-full border border-border bg-white px-3 py-1 text-sm text-secondary-foreground"
+                >
+                  {ingredient}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="mb-5 rounded-2xl border border-border bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <h3 className="text-lg font-semibold">Recent food history</h3>
+        </div>
+        {recentHistory.length ? (
+          <div className="space-y-3">
+            {recentHistory.map((entry) => {
+              const styles = getVerdictStyles(entry.verdict);
+              return (
+                <div key={`${entry.date}-${entry.item}`} className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-secondary/60 px-4 py-3">
+                  <div>
+                    <p className="font-semibold text-foreground">{entry.item}</p>
+                    <p className="text-sm text-muted-foreground">{entry.date}</p>
+                  </div>
+                  <span className={`rounded-full px-3 py-1 text-sm font-semibold ${styles.badge}`}>{styles.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-base text-muted-foreground">No prior food checks yet. Your next scan will start the history.</p>
+        )}
+      </section>
+
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+        <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-amber-600" />
+        <p className="text-base leading-relaxed text-amber-800">
+          <strong>Heart-safe reminder:</strong> The AI can help identify foods and estimate ingredients, but label details,
+          sodium, and portion size still matter. Maria should follow her care team&apos;s dietary guidance first.
+        </p>
       </div>
     </PageShell>
-  )
+  );
 }
