@@ -6,25 +6,30 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
-    "next": "14.2.3",
-    "openai": "^4.47.1",
-    "react": "^18",
-    "react-dom": "^18",
-    "resend": "^6.9.4"
+    "@google/generative-ai": "^0.21.0",
+    "@vercel/analytics": "1.6.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.564.0",
+    "next": "16.2.0",
+    "next-auth": "^4.24.13",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "resend": "^6.9.4",
+    "tailwind-merge": "^3.3.1",
+    "tw-animate-css": "1.3.3"
   },
   "devDependencies": {
-    "@types/node": "^20.19.37",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "autoprefixer": "^10.0.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.3",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "@tailwindcss/postcss": "^4.2.0",
+    "@types/node": "^22",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "16.2.0",
+    "postcss": "^8.5",
+    "tailwindcss": "^4.2.0",
+    "typescript": "5.7.3"
   }
 }
