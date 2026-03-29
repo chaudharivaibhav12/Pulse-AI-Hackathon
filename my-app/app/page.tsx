@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Heart, Utensils, Dumbbell, MessageCircle, Users, AlertTriangle, TrendingUp } from "lucide-react"
 import { PageShell } from "@/components/pulse/page-shell"
 import { useState } from "react"
+import { signIn, useSession } from "next-auth/react"
 
 const featureCards = [
   {
@@ -58,10 +59,14 @@ const featureCards = [
 ]
 
 export default function DashboardPage() {
+  const { data: session, status } = useSession()
   const [chatOpen, setChatOpen] = useState(false)
   const sessionsComplete = 8
   const totalSessions = 36
   const progressPercent = Math.round((sessionsComplete / totalSessions) * 100)
+  const isAuthenticated = status === "authenticated"
+  const displayName =
+    session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "there"
 
   return (
     <PageShell showBack={false}>
@@ -69,16 +74,41 @@ export default function DashboardPage() {
       <section className="mb-6">
         <p className="text-muted-foreground text-lg mb-1">Good Morning,</p>
         <h1 className="text-4xl font-bold text-foreground text-balance leading-tight">
-          Maria <span className="wave inline-block">👋</span>
+          {isAuthenticated ? (
+            <>
+              {displayName} <span className="wave inline-block">👋</span>
+            </>
+          ) : (
+            "Sign in to get started"
+          )}
         </h1>
-        <p className="text-muted-foreground mt-1">{"Let's keep that heart strong today."}</p>
+        <p className="text-muted-foreground mt-1">
+          {isAuthenticated
+            ? "Let’s keep that heart strong today."
+            : "Connect your Google account to personalize the Buddy Network and live app features."}
+        </p>
+        {!isAuthenticated && (
+          <button
+            onClick={() => signIn("google")}
+            className="mt-4 rounded-xl bg-primary px-4 py-2 font-semibold text-white hover:bg-primary/90"
+          >
+            Sign In with Google
+          </button>
+        )}
       </section>
 
       {/* Rehab Progress Card */}
       <section className="bg-primary rounded-2xl p-6 text-white mb-6 shadow-md">
-        <div className="flex items-center gap-2 mb-1">
-          <Heart className="w-5 h-5 fill-white/80 text-white/80" />
-          <span className="text-sm font-medium text-white/80 uppercase tracking-wide">Rehab Progress</span>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <div className="flex items-center gap-2">
+            <Heart className="w-5 h-5 fill-white/80 text-white/80" />
+            <span className="text-sm font-medium text-white/80 uppercase tracking-wide">
+              Recovery Program Progress
+            </span>
+          </div>
+          <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white/85">
+            Demo Data
+          </span>
         </div>
         <p className="text-2xl font-bold mb-1">
           {sessionsComplete} of {totalSessions} sessions complete
@@ -98,6 +128,9 @@ export default function DashboardPage() {
           />
         </div>
         <p className="text-white/70 text-sm mt-2">{progressPercent}% complete — keep going!</p>
+        <p className="text-white/70 text-xs mt-3">
+          This card shows the current rehab demo dataset. Login personalizes identity and buddy features, not the rehab record.
+        </p>
       </section>
 
       {/* Feature Cards Grid */}
@@ -146,7 +179,9 @@ export default function DashboardPage() {
           </div>
           <div className="p-4">
             <div className="bg-primary/10 rounded-2xl rounded-tl-sm p-3 mb-3 text-sm text-foreground">
-              Hi Maria! How can I help you today? I can answer nutrition questions, help with your workout, or just check in.
+              {isAuthenticated
+                ? `Hi ${displayName}! How can I help you today? I can answer nutrition questions, help with your workout, or just check in.`
+                : "Hi there! Sign in if you want your live user identity reflected across the app, or open the full chat to continue."}
             </div>
             <Link
               href="/copilot"

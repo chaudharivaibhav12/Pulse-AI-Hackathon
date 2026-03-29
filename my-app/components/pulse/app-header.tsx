@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Heart } from "lucide-react"
+import { signIn, signOut, useSession } from "next-auth/react"
 import { useFontSize } from "./font-size-context"
 
 interface AppHeaderProps {
@@ -14,6 +15,7 @@ interface AppHeaderProps {
 export function AppHeader({ title, showBack = true, backHref }: AppHeaderProps) {
   const router = useRouter()
   const { size, setSize } = useFontSize()
+  const { data: session, status } = useSession()
 
   const handleBack = () => {
     if (backHref) {
@@ -47,25 +49,44 @@ export function AppHeader({ title, showBack = true, backHref }: AppHeaderProps) 
           </span>
         </Link>
 
-        {/* Right: font size toggle */}
-        <div className="flex items-center gap-0.5 bg-secondary rounded-full px-2 py-1">
-          {(["sm", "md", "lg"] as const).map((s, i) => {
-            const labels = ["A", "AA", "AAA"]
-            return (
-              <button
-                key={s}
-                onClick={() => setSize(s)}
-                aria-label={`Font size ${labels[i]}`}
-                className={`px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${
-                  size === s
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {labels[i]}
-              </button>
-            )
-          })}
+        {/* Right: auth + font size */}
+        <div className="flex items-center gap-2">
+          {status === "authenticated" ? (
+            <button
+              onClick={() => signOut({ callbackUrl: "/" })}
+              className="max-w-32 truncate rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-secondary"
+              title={session.user?.email ?? session.user?.name ?? "Signed in"}
+            >
+              {session.user?.name?.split(" ")[0] || "Sign Out"}
+            </button>
+          ) : (
+            <button
+              onClick={() => signIn("google")}
+              className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary/90"
+            >
+              Sign In
+            </button>
+          )}
+
+          <div className="flex items-center gap-0.5 bg-secondary rounded-full px-2 py-1">
+            {(["sm", "md", "lg"] as const).map((s, i) => {
+              const labels = ["A", "AA", "AAA"]
+              return (
+                <button
+                  key={s}
+                  onClick={() => setSize(s)}
+                  aria-label={`Font size ${labels[i]}`}
+                  className={`px-2 py-0.5 rounded-full text-xs font-semibold transition-colors ${
+                    size === s
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {labels[i]}
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
     </header>

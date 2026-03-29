@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { MapPin, MessageCircle, Calendar, Info } from "lucide-react"
 import { PageShell } from "@/components/pulse/page-shell"
-import { signIn, signOut, useSession } from "next-auth/react"
+import { signIn, useSession } from "next-auth/react"
 
 type Buddy = {
   id: string
@@ -118,50 +118,75 @@ export default function BuddyPage() {
     () => Object.values(connected).filter(Boolean).length,
     [connected]
   )
+  const displayName =
+    session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "You"
+  const displayInitials = initialsFor(displayName)
 
   return (
     <PageShell title="Buddy Network">
-      <h1 className="text-3xl font-bold mb-2">Your Recovery Buddies 🤝</h1>
+      <h1 className="text-3xl font-bold mb-2">
+        {isAuthenticated ? `${displayName}'s Buddy Network 🤝` : "Your Recovery Buddies 🤝"}
+      </h1>
       <p className="text-muted-foreground text-base mb-5 leading-relaxed">
-        Stay motivated with people who understand your journey.
+        {isAuthenticated
+          ? "These are the real users connected to your live app session."
+          : "Stay motivated with people who understand your journey."}
       </p>
 
       <div className="bg-white rounded-2xl border border-border shadow-sm p-5 mb-6">
-        {isAuthenticated ? (
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Signed in as</p>
-              <p className="font-semibold text-foreground">
-                {session.user?.name || session.user?.email}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {connectedCount} active buddy connection{connectedCount === 1 ? "" : "s"} in memory
-              </p>
-            </div>
-            <button
-              onClick={() => signOut({ callbackUrl: "/buddy" })}
-              className="rounded-xl border border-border px-4 py-2 font-semibold text-foreground hover:bg-secondary"
-            >
-              Sign Out
-            </button>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {isAuthenticated ? "Signed in as" : "Google account required"}
+            </p>
+            <p className="font-semibold text-foreground">
+              {isAuthenticated
+                ? session.user?.name || session.user?.email
+                : "Use the header sign-in button to join the Buddy Network"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {isAuthenticated
+                ? `${connectedCount} active buddy connection${connectedCount === 1 ? "" : "s"} in memory`
+                : "Signing in is now centralized across the app."}
+            </p>
           </div>
-        ) : (
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="font-semibold text-foreground">Connect your Google account</p>
-              <p className="text-sm text-muted-foreground">
-                Sign in to save buddy connections in the in-memory user store for this running app.
-              </p>
-            </div>
+          {!isAuthenticated && (
             <button
               onClick={() => signIn("google")}
               className="rounded-xl bg-primary px-4 py-2 font-semibold text-white hover:bg-primary/90"
             >
-              Sign In with Google
+              Sign In
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {isAuthenticated && (
+        <div className="bg-white rounded-2xl border border-border shadow-sm p-5 mb-6">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center overflow-hidden shrink-0">
+              {session.user?.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={session.user.image}
+                  alt={displayName}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span className="text-white text-xl font-bold">{displayInitials}</span>
+              )}
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Your buddy profile</p>
+              <p className="text-xl font-bold text-foreground">{displayName}</p>
+              <p className="text-sm text-muted-foreground">
+                {session.user?.email} • {connectedCount} active connection
+                {connectedCount === 1 ? "" : "s"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
