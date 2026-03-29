@@ -45,7 +45,7 @@ export function AppHeader({ title, showBack = true, backHref }: AppHeaderProps) 
         <Link href="/" className="flex items-center gap-2">
           <Heart className="w-5 h-5 fill-[var(--pulse-red)] text-[var(--pulse-red)]" />
           <span className="font-bold text-lg text-primary tracking-tight">
-            {title || "Pulse AI"}
+            {title || "Cardiac Care Companion"}
           </span>
         </Link>
 

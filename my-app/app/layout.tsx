@@ -4,7 +4,7 @@ import { AuthSessionProvider } from '@/components/session-provider'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Pulse AI — Cardiac Rehabilitation',
+  title: 'Cardiac Care Companion',
   description: 'Your personal cardiac rehabilitation companion. Track progress, exercise safely, and stay connected with your care team.',
   generator: 'v0.app',
 }
